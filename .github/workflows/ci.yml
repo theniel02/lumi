@@ -1,0 +1,54 @@
+name: CMake Configure & Build
+
+on:
+  push:
+    branches: [ main, 0.0.X ]
+  pull_request:
+    branches: [ main, 0.0.X ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup (Ubuntu) - apt deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential git libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Setup (Windows) - vcpkg and deps
+        if: matrix.os == 'windows-latest'
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git .github/vcpkg
+          .github/vcpkg/bootstrap-vcpkg.bat
+          .github/vcpkg/vcpkg.exe install glfw3:x64-windows opencascade:x64-windows
+        shell: powershell
+
+      - name: Configure (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $toolchain = "$PWD\.github\vcpkg\scripts\buildsystems\vcpkg.cmake"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$toolchain -DVCPKG_TARGET_TRIPLET=x64-windows
+        shell: powershell
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Show CMakeCache (debug)
+        if: failure()
+        run: |
+          echo "-- CMakeCache.txt --"
+          sed -n '1,200p' build/CMakeCache.txt || true
